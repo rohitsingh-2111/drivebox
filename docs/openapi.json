@@ -1,0 +1,1629 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Drivebox API",
+    "version": "1.0.0",
+    "description": "MERN file storage with cookie sessions, inherited viewer/editor permissions, immutable versions, trash, and retained-byte quotas. All routes are under /api. Unsafe browser requests must send the configured Origin. Unauthorized resource IDs return 404; known resources with insufficient role return 403. MongoDB replica set transactions are required."
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Same origin API"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication"
+    },
+    {
+      "name": "Items"
+    },
+    {
+      "name": "Files"
+    },
+    {
+      "name": "Sharing"
+    },
+    {
+      "name": "Versions"
+    },
+    {
+      "name": "Trash"
+    },
+    {
+      "name": "Operations"
+    }
+  ],
+  "security": [
+    {
+      "cookieSession": []
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "operationId": "register",
+        "summary": "Register and sign in",
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "201": {
+            "description": "Account created and cookie set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Browser write requests require an Origin header matching CLIENT_ORIGIN. Session cookies are issued on success.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 10,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Sign in",
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticated and cookie set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Browser write requests require an Origin header matching CLIENT_ORIGIN. Session cookies are issued on success.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Sign out",
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Invalidates the current server-side session and clears its cookie. Idempotent when no session cookie is present. Browser Origin checks still apply.",
+        "security": []
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "summary": "Read current account and quota",
+        "tags": [
+          "Authentication"
+        ],
+        "responses": {
+          "200": {
+            "description": "Current account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "summary": "List or search a folder, shared root, or trash",
+        "tags": [
+          "Items"
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Search is scoped to the current folder. Shared root lists directly shared entries. Folder navigation applies inherited access. Pagination defaults to 20 entries.",
+        "parameters": [
+          {
+            "name": "parentId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "Omit for the relevant root."
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "drive",
+                "shared",
+                "trash"
+              ],
+              "default": "drive"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Escaped case-insensitive filename substring within the current folder."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/folders": {
+      "post": {
+        "operationId": "createFolder",
+        "summary": "Create a folder",
+        "tags": [
+          "Items"
+        ],
+        "responses": {
+          "201": {
+            "description": "Folder created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner or editor on the destination folder. Children retain the tree owner. Omit parentId or use null for the current user root.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Trimmed and NFC-normalized. No slashes, backslashes, control characters, dot or dot-dot names. Unique case-insensitively among active siblings."
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{24}$",
+                    "example": "507f1f77bcf86cd799439011",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files": {
+      "post": {
+        "operationId": "uploadFile",
+        "summary": "Upload a new file",
+        "tags": [
+          "Files"
+        ],
+        "responses": {
+          "201": {
+            "description": "File created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "507": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "One multipart file. Optional parentId is omitted for root. Size is limited by MAX_UPLOAD_BYTES; quota is charged to the destination tree owner and includes retained bytes. Uploading an existing filename is a conflict; use the versions endpoint to replace content.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{24}$",
+                    "example": "507f1f77bcf86cd799439011"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "summary": "Read item metadata",
+        "tags": [
+          "Items"
+        ],
+        "responses": {
+          "200": {
+            "description": "Item and accessible breadcrumbs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "$ref": "#/components/schemas/Item"
+                    },
+                    "breadcrumbs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Breadcrumb"
+                      }
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "breadcrumbs"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Inaccessible item IDs return 404. The owner may inspect retained trash; shared users may not. Breadcrumbs do not expose unshared ancestors.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "updateItem",
+        "summary": "Rename or move an item",
+        "tags": [
+          "Items"
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Renaming requires editor or owner. Moving requires owner. Omitted parentId means no move; null moves to root. Cross-owner moves, cycles, and trashed destinations are rejected. Supplying a stale revision returns 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Trimmed and NFC-normalized. No slashes, backslashes, control characters, dot or dot-dot names. Unique case-insensitively among active siblings."
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{24}$",
+                    "example": "507f1f77bcf86cd799439011",
+                    "nullable": true
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional optimistic concurrency precondition. Stale revisions return 409."
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1,
+                "anyOf": [
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "parentId"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "trashItem",
+        "summary": "Move an item to trash",
+        "tags": [
+          "Trash"
+        ],
+        "responses": {
+          "204": {
+            "description": "Moved to trash"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner only. Trashing a folder hides its descendants from shared users, including separately shared descendants. No bytes or versions are purged; retained data still counts against quota.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/items/{id}/restore": {
+      "post": {
+        "operationId": "restoreItem",
+        "summary": "Restore an item from trash",
+        "tags": [
+          "Trash"
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner only. Omit parentId to retain the original parent or supply null for root. Rejects duplicate names, cycles, invalid ownership, and missing or trashed destinations. Ownership and sharing are preserved.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{24}$",
+                    "example": "507f1f77bcf86cd799439011",
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/files/{id}/download": {
+      "get": {
+        "operationId": "downloadFile",
+        "summary": "Download current or historical file bytes",
+        "tags": [
+          "Files"
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Attachment with a safely encoded filename."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Requires read access to the file and its ancestors. The owner may download retained trash; shared users may not access a trashed item or ancestor. Always returns an attachment. A versionId must belong to this file. The blob directory has no public URL.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "Omit to download the current version."
+          }
+        ]
+      }
+    },
+    "/files/{id}/versions": {
+      "get": {
+        "operationId": "listVersions",
+        "summary": "List immutable version history",
+        "tags": [
+          "Versions"
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Requires viewer, editor, or owner access to the file. The owner may inspect history of retained trash; shared users may not. History remains intact after restoring an earlier version.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "uploadVersion",
+        "summary": "Upload a new file version",
+        "tags": [
+          "Versions"
+        ],
+        "responses": {
+          "201": {
+            "description": "Version created and current item updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "413": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "507": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Editor or owner only. Creates a new retained blob and immutable history entry. Current file name is unchanged. Quota is charged to the owner; previous versions remain charged.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional optimistic concurrency precondition. Stale revisions return 409."
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/files/{id}/versions/{versionId}/restore": {
+      "post": {
+        "operationId": "restoreVersion",
+        "summary": "Make a historical version current",
+        "tags": [
+          "Versions"
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored item with a new version entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Editor or owner only. Creates a new immutable history entry referencing the retained blob. Does not duplicate bytes or charge additional quota. The selected version must belong to this file.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional optimistic concurrency precondition. Stale revisions return 409."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/items/{id}/shares": {
+      "get": {
+        "operationId": "listShares",
+        "summary": "List direct shares",
+        "tags": [
+          "Sharing"
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct grants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharesResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner only. Does not list inherited grants.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "setShare",
+        "summary": "Grant or update a registered user share",
+        "tags": [
+          "Sharing"
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated direct grants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharesResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner only. Folder grants apply recursively. The strongest direct or ancestor grant wins. The recipient must already have an account.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "viewer",
+                      "editor"
+                    ]
+                  }
+                },
+                "required": [
+                  "email",
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/items/{id}/shares/{userId}": {
+      "delete": {
+        "operationId": "revokeShare",
+        "summary": "Revoke a direct grant",
+        "tags": [
+          "Sharing"
+        ],
+        "responses": {
+          "204": {
+            "description": "Direct grant removed"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "description": "Owner only. Removing a direct grant does not revoke an independent inherited grant.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Read API and database health",
+        "tags": [
+          "Operations"
+        ],
+        "responses": {
+          "200": {
+            "description": "Database connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "description": "Database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "Read this OpenAPI specification",
+        "tags": [
+          "Operations"
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.0 document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "drivebox_session",
+        "description": "HttpOnly SameSite=Lax opaque session cookie issued by register/login. Secure when CLIENT_ORIGIN is HTTPS."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "NAME_CONFLICT"
+              },
+              "message": {
+                "type": "string",
+                "example": "An item with that name already exists."
+              },
+              "details": {}
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "usedBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "quotaBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "usedBytes",
+          "quotaBytes"
+        ]
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "folder"
+            ]
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "nullable": true
+          },
+          "ownerId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mimeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trashedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "editor",
+              "viewer"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "parentId",
+          "ownerId",
+          "size",
+          "permission",
+          "revision"
+        ]
+      },
+      "Breadcrumb": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "FileVersion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "Display name of the account that created this version."
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "size",
+          "mimeType",
+          "createdAt",
+          "createdBy",
+          "current"
+        ]
+      },
+      "Share": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "editor"
+            ]
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "email",
+          "role"
+        ]
+      },
+      "ItemResult": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          }
+        },
+        "required": [
+          "item"
+        ]
+      },
+      "UserResult": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "user"
+        ]
+      },
+      "SharesResult": {
+        "type": "object",
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Share"
+            }
+          }
+        },
+        "required": [
+          "shares"
+        ]
+      },
+      "ItemList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "folder": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Item"
+              }
+            ],
+            "nullable": true
+          },
+          "breadcrumbs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Breadcrumb"
+            }
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit",
+          "breadcrumbs"
+        ]
+      },
+      "VersionList": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileVersion"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "versions",
+          "total",
+          "page",
+          "limit"
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "database"
+        ]
+      }
+    },
+    "responses": {
+      "ApiError": {
+        "description": "Consistent API error: 400 validation, 401 unauthenticated, 403 insufficient role/origin, 404 missing or inaccessible, 409 conflict, 413 upload too large, 429 rate limit, 500 unexpected server failure, 503 unavailable stored content/service, or 507 quota exceeded.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}
